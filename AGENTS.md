@@ -8,12 +8,11 @@ Read these files for normal work:
 2. `docs/ai/project-context.md`
 3. `docs/ai/config-notes.md`
 
-When working on the Rust branch or Rust migration, also read:
+Read on demand (historical migration records, long; the 2026-10 Phase 1–5 narrative is not needed for ordinary work):
 
-4. `docs/ai/rust-handover.md`
-5. `docs/ai/rust-rewrite-plan.md`
-6. `docs/rust/contracts/index.md`
-7. `.trellis/workflow.md` when optional local Trellis tooling is installed and a task is active
+4. `docs/rust/contracts/index.md` when touching frozen product behavior
+5. `docs/ai/rust-handover.md` / `docs/ai/rust-rewrite-plan.md` only for migration history or architecture questions
+6. `.trellis/workflow.md` and the task's `prd.md` / `design.md` / `implement.md` when a local Trellis task is active; review rules are in `.trellis/spec/backend/quality-guidelines.md` ("Review loop")
 
 This repository is `jasonxtt/atomdns` (local clone `/Users/tom/github/atomdns`,
 default branch `main`). It is the Rust rewrite of MosDNS, named AtomDNS since

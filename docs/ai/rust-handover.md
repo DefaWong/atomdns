@@ -4,6 +4,12 @@ Last verified: `2026-10-06`
 
 Concise cross-session handover for the Rust migration on branch `rust`.
 
+> Historical (2026-11-02): this file records the Phase 1–5 migration up to early
+> October. Mentions of "C2C" are the retired ChatGPT-web review loop (kept as
+> evidence only); current review rules are in
+> `.trellis/spec/backend/quality-guidelines.md` ("Review loop"). Work now happens
+> on `main` in `/Users/tom/github/atomdns`.
+
 ## Current planning — native core query primitives (2026-10-06)
 
 User decision (2026-10-06): the first production replacement is gated on the
@@ -106,7 +112,9 @@ no actionable issue, matched all129 source/manifests locally/remotely and reran
 3. Check state: `git branch --show-current`, `git status --short --branch`,
    `python3 ./.trellis/scripts/task.py list`.
 4. Read all three artifacts of the task being resumed, if any.
-5. Run the `trellis-before-dev` skill before changing implementation code.
+5. Before changing implementation code, read the active task's artifacts and
+   `.trellis/spec/backend/index.md` (the `trellis-before-dev` skill exists only
+   for Codex; Claude Code reads the spec files directly).
 6. **Preserve unrelated dirty files.** Keep Trellis auto-commit disabled, never
    use `git add -A`, and stage exact paths only.
 

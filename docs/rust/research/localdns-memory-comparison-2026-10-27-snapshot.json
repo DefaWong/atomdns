@@ -1,0 +1,181 @@
+{
+  "captured_unix": 1793072912,
+  "mode": "read_only_no_load",
+  "sampling": "sequential proc and GET reads; not atomic or a paired benchmark",
+  "processes": {
+    "rtdns": {
+      "status": {
+        "VmHWM": "87440 kB",
+        "VmRSS": "61664 kB",
+        "RssAnon": "49016 kB",
+        "RssFile": "12648 kB",
+        "Threads": "3"
+      },
+      "binary_sha256": "324381eeba26a595192407407e6538c6804e4b2769981d0d45397b4ebd63b67a",
+      "metrics": [
+        "mosdns_cache_size_current{tag=\"cache_all\"} 0",
+        "mosdns_cache_size_current{tag=\"cache_all_noleak\"} 22629",
+        "mosdns_cache_size_current{tag=\"cache_cn\"} 11934",
+        "mosdns_cache_size_current{tag=\"cache_google\"} 6",
+        "mosdns_cache_size_current{tag=\"cache_google_node\"} 7283",
+        "mosdns_cache_size_current{tag=\"cache_node\"} 0",
+        "mosdns_cache_size_current{tag=\"cache_cnmihomo\"} 0"
+      ],
+      "reported_version": "v0.4.0-patch-3687d269",
+      "audit_stats": {
+        "total_queries": 10749,
+        "average_duration_ms": 0.3672903525909387
+      }
+    },
+    "localdns": {
+      "status": {
+        "VmHWM": "43680 kB",
+        "VmRSS": "25068 kB",
+        "RssAnon": "17688 kB",
+        "RssFile": "7380 kB",
+        "Threads": "17"
+      },
+      "binary_sha256": "71c37a3e9bf5a634c2e3e4244599077d9f61883a933efaf59fcfd16ae8e5ae0e",
+      "metrics": [
+        "localdns_runtime_info{runtime=\"rust-1.98.1\",platform=\"AMD64-V1\"} 1",
+        "localdns_info{version=\"FJGOE\",allocator=\"jemalloc\"} 1",
+        "localdns_cache_size_current{tag=\"cache_main\"} 184",
+        "localdns_cache_bytes{tag=\"cache_main\"} 299990",
+        "localdns_cache_budget_bytes{tag=\"cache_main\"} 55924053",
+        "localdns_cache_size_current{tag=\"cache_domestic\"} 9770",
+        "localdns_cache_bytes{tag=\"cache_domestic\"} 3178035",
+        "localdns_cache_budget_bytes{tag=\"cache_domestic\"} 55924053",
+        "localdns_cache_size_current{tag=\"cache_foreign\"} 5033",
+        "localdns_cache_bytes{tag=\"cache_foreign\"} 1489562",
+        "localdns_cache_budget_bytes{tag=\"cache_foreign\"} 11184810",
+        "localdns_cache_size_current{tag=\"cache_foreign_ecs\"} 4979",
+        "localdns_cache_bytes{tag=\"cache_foreign_ecs\"} 1480782",
+        "localdns_cache_budget_bytes{tag=\"cache_foreign_ecs\"} 11184810"
+      ],
+      "querylog_stats": {
+        "total_queries": 369976,
+        "average_duration_ms": 18.866,
+        "live_domain_count": 8698,
+        "client_count": 2,
+        "domain_count": 11693,
+        "capturing": true,
+        "capacity": 100000
+      },
+      "pagination": {
+        "current_page": 1,
+        "total_pages": 1000,
+        "total_items": 100000,
+        "limit": 100
+      },
+      "sample": {
+        "count": 100,
+        "trace_nonempty": 0,
+        "attempt_nonempty": 0,
+        "fields": [
+          "answers",
+          "cache",
+          "client_ip",
+          "domain_set",
+          "duration_ms",
+          "learning",
+          "query_class",
+          "query_name",
+          "query_time",
+          "query_type",
+          "response_code",
+          "trace_id",
+          "upstream_attempt"
+        ],
+        "answer_object_keys": [
+          "data"
+        ]
+      }
+    }
+  },
+  "localdns_settings_numeric": {
+    "cache": {
+      "main.max_entries": 500000,
+      "main.stale_ttl": 604800,
+      "main.save_interval": 1800,
+      "domestic.max_entries": 500000,
+      "domestic.stale_ttl": 604800,
+      "domestic.save_interval": 1800,
+      "foreign.max_entries": 100000,
+      "foreign.stale_ttl": 604800,
+      "foreign.save_interval": 1800,
+      "foreign_ecs.max_entries": 100000,
+      "foreign_ecs.stale_ttl": 604800,
+      "foreign_ecs.save_interval": 1800
+    },
+    "querylog": {
+      "capacity": 100000
+    },
+    "generated": {
+      "domain_stats.max_entries": 500000,
+      "domain_stats.save_interval": 600,
+      "realip.max_entries": 100000,
+      "realip.save_interval": 3600,
+      "fakeip.max_entries": 100000,
+      "fakeip.save_interval": 3600,
+      "nodata.max_entries": 100000,
+      "nodata.save_interval": 3600
+    }
+  },
+  "rtdns_cache_config_numeric_lines": [
+    "- tag: cache_all",
+    "size: 20000000",
+    "lazy_cache_ttl: 259200000",
+    "dump_interval: 36000",
+    "- tag: cache_all_noleak",
+    "size: 20000000",
+    "lazy_cache_ttl: 259200000",
+    "dump_interval: 36000",
+    "- tag: cache_cn",
+    "size: 20000000",
+    "lazy_cache_ttl: 259200000",
+    "dump_interval: 36000",
+    "- tag: cache_google",
+    "size: 20000000",
+    "lazy_cache_ttl: 259200000",
+    "dump_interval: 36000",
+    "- tag: cache_google_node",
+    "size: 20000000",
+    "lazy_cache_ttl: 259200000",
+    "enable_ecs: true",
+    "dump_interval: 36000",
+    "- tag: cache_node",
+    "size: 20000000",
+    "lazy_cache_ttl: 259200000",
+    "dump_interval: 36000",
+    "- tag: cache_cnmihomo",
+    "size: 20000000",
+    "lazy_cache_ttl: 259200000",
+    "dump_interval: 36000"
+  ],
+  "source_review": {
+    "head": "3687d269b1699b7061a3b48c5e4a9f51745bc625",
+    "main": "90997571dd29d5bd7162765e5dbc20ff16261e07",
+    "localdns_report_path": "ai:/home/tom/github/localdns/rea-memory-analysis.md",
+    "localdns_report_sha256": "3f6f944ca617dde9bc7d4ff4872cba2fcf276b92302fc67f6af384436e1b677b",
+    "localdns_report_binary_sha256": "1254f44e537a52890700cd4b307ea899a7ccc08fbd843e9d496b950d49d1ea53",
+    "production_binary_source_manifest_verified": false,
+    "files_sha256": {
+      "rust/cache-core/src/lib.rs": "c3396aa26e4c0c86a21a469692102acf21bb6327445209c279d26250d7b1936d",
+      "rust/native-host/src/cache.rs": "a51c261d7a208482dc785523ca7cd7e20e65aca3b4d388127df4d291e4e37861",
+      "rust/native-host/src/cache_dump.rs": "0b5e8d95d50d781c600c2af2f918976f1c6cc8835e27497623b4538419e271b6",
+      "rust/native-host/src/observer.rs": "ecbfd2ffe47d3e7e2f29f78863744ece056f254e9bc69ef62f600dfd28fcb538",
+      "rust/native-host/src/observer/retention.rs": "4bdc8f4c77a9aeb6c00124cd4f90e254352ff85059e3926e27d9732fd85928aa",
+      "rust/native-host/src/api.rs": "090f427b472f16c279e87a30468b78e20813fef49e627b9bfcbe95024d65dc12",
+      "rust/native-host/src/memory.rs": "55b020e6e88e514dcb2dadb07d3b9938bc637d8a9788e8c64fe6438aa31ff217",
+      "rust/native-host/src/udp.rs": "ec3f7c93e70894d8f08076d8a96279df85c7cb76da16a488e4623e753af59769",
+      "rust/upstream-core/src/udp.rs": "ec6794d51111f13322c19ed81befad48d4e2b25dabdf9af36f86ccda40928db8",
+      "rust/matcher-core/src/compact.rs": "72ac4afd38d475b3fffe8ef31a68a4e04c9ae8eafc0fdd7a4c8854ea73b027df",
+      "rust/matcher-core/src/valued.rs": "ccf30bcb2aa51aaa33f8b020d8a6668e899cc5f80ad9247b8fd946e7efec054e",
+      "rust/matcher-core/src/srs.rs": "8f4afefa79e6be900a73cd8c7b6d71038a8652df83ae5b937596111460db5cce",
+      "rust/native-host/src/config/providers.rs": "8d9a39231322afd7252aa56880f8e4edc6a3a80d29e45fb301ba98e2b773750e",
+      "rust/native-host/src/route_learner.rs": "98ba7061843088086b235c093809dcbd4c28e21b01223323e26685c5597d5804",
+      "rust/native-host/src/domain_output.rs": "4721b2ba6b74fd0892c3268b5e9b2f53563d40d2f379593d3b8f9b0c659d3f3e",
+      "rust/native-host/src/config/settings.rs": "5eefdc2075be578cd555c13c766954799eadd162de427826cd4714cdb7b06b4e"
+    }
+  }
+}
