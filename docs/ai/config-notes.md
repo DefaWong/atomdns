@@ -78,9 +78,11 @@ The former `switch1`–`switch17` are named `feature_flag` objects since config 
 (`config_rust/sub_config/flags.yaml`, values in `webinfo/settings.json` `flags`,
 migrated once from `rule/switchN.txt`; contract `docs/rust/contracts/native-feature-flags.md`).
 Flags take no fast-flag bits: the host reserves none, and 32–47/49 are free for `fast_mark`
-and mapper `mark`. The configuration's own convention stays: `fast_mark 48` is the
-unified-matcher sentinel; reusing it can skip `unified_matcher1`, produce
-`unmatched_rule`, and fall through to FakeIP. Verify deployed audit fields such as
+and mapper `mark`. Bit 48 was the Go UDP fast path's "already matched" sentinel; since config schema 7
+nothing in the default configuration tests or sets it (the host never did), but keep it
+unused: an older or user-written configuration may still carry `!fast_mark 48` guards,
+and setting 48 there would skip `unified_matcher1`, produce `unmatched_rule`, and fall
+through to FakeIP. Verify deployed audit fields such as
 `domain_set`, `effective_tag`, `final_sequence`, `final_upstream`, and
 `matched_rule_source`.
 
