@@ -8,8 +8,10 @@
 #     scripts/package-installer-assets.sh release/installer
 #
 # Builds the customized sing-box for linux/amd64 (static, CGO disabled) from SINGBOX_SRC,
-# copies the other assets and writes SHA256SUMS. It only builds; publishing a release
-# is a separate, confirmed step (docs/rust/installer.md).
+# copies the other assets and writes SHA256SUMS. scripts/installer-assets.json pins the
+# sing-box commit (SINGBOX_SRC must be checked out at it) and the config_rust.zip sha256.
+# release-build.yml runs this; publishing a release is a separate, confirmed step
+# (docs/rust/installer.md).
 set -euo pipefail
 
 OUT="${1:?output directory is required}"
@@ -19,9 +21,22 @@ OUT="${1:?output directory is required}"
 : "${SINGBOX_SRC:?path to the customized sing-box checkout}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PINS="$ROOT/scripts/installer-assets.json"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 SINGBOX_SRC="$(cd "$SINGBOX_SRC" && pwd)"
+
+PIN_COMMIT="$(jq -r .singbox.commit "$PINS")"
+PIN_VERSION="$(jq -r .singbox.version "$PINS")"
+PIN_CONFIG_SHA="$(jq -r .config_full.sha256 "$PINS")"
+if command -v sha256sum >/dev/null; then SUM=(sha256sum); else SUM=(shasum -a 256); fi
+HEAD="$(git -C "$SINGBOX_SRC" rev-parse HEAD)"
+[ "$HEAD" = "$PIN_COMMIT" ] || { echo "$SINGBOX_SRC is at $HEAD, $PINS pins $PIN_COMMIT" >&2; exit 1; }
+if [ -n "$(git -C "$SINGBOX_SRC" status --porcelain --untracked-files=no)" ]; then
+  echo "$SINGBOX_SRC has uncommitted changes" >&2; exit 1
+fi
+CONFIG_SHA="$("${SUM[@]}" "$CONFIG_ZIP" | cut -d' ' -f1)"
+[ "$CONFIG_SHA" = "$PIN_CONFIG_SHA" ] || { echo "$CONFIG_ZIP sha256 $CONFIG_SHA, $PINS pins $PIN_CONFIG_SHA" >&2; exit 1; }
 
 tar -tzf "$ATOMDNS_MUSL_TGZ" | grep -qx atomdns || { echo "$ATOMDNS_MUSL_TGZ has no top-level atomdns" >&2; exit 1; }
 tar -tzf "$WEBUI_TGZ" | grep -qx index.html || { echo "$WEBUI_TGZ has no top-level index.html" >&2; exit 1; }
@@ -29,11 +44,7 @@ unzip -l "$CONFIG_ZIP" | grep -q ' config_custom.yaml$' || { echo "$CONFIG_ZIP h
 
 TAGS="$(cat "$SINGBOX_SRC/release/DEFAULT_BUILD_TAGS_OTHERS")"
 LDFLAGS_SHARED="$(cat "$SINGBOX_SRC/release/LDFLAGS")"
-BASE_TAG="$(git -C "$SINGBOX_SRC" describe --tags --abbrev=0)"
-VERSION="${BASE_TAG#v}-atomdns.$(git -C "$SINGBOX_SRC" rev-parse --short HEAD)"
-if [ -n "$(git -C "$SINGBOX_SRC" status --porcelain --untracked-files=no)" ]; then
-  echo "warning: $SINGBOX_SRC has uncommitted changes" >&2
-fi
+VERSION="${PIN_VERSION}-atomdns.${PIN_COMMIT:0:10}"
 
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
@@ -56,7 +67,6 @@ cp "$ROOT/scripts/install.sh" "$OUT/install.sh"
 
 (
   cd "$OUT"
-  if command -v sha256sum >/dev/null; then SUM=(sha256sum); else SUM=(shasum -a 256); fi
   "${SUM[@]}" atomdns-linux-amd64-musl.tar.gz sing-box-linux-amd64.tar.gz atomdns-webui.tar.gz config_rust.zip >SHA256SUMS
   cat SHA256SUMS
 )

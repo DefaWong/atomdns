@@ -101,15 +101,31 @@ rm -rf /cus/atomdns /etc/sing-box /var/lib/sing-box
 
 ## Release 资产
 
-脚本从 `https://github.com/<repo>/releases/<latest|download/tag>/` 下载以下文件，按 `SHA256SUMS` 校验：
+脚本从 `https://github.com/<repo>/releases/<latest|download/tag>/` 下载以下文件，按 `SHA256SUMS` 校验。这些文件都由 `release-build.yml` 一次构建完成：
 
 | 资产 | 来源 |
 | --- | --- |
-| `atomdns-linux-amd64-musl.tar.gz` | `VARIANTS="amd64 amd64-musl" scripts/build-rust-release.sh vX.Y.Z release/rust`，或同样参数的静态 musl 构建 |
-| `atomdns-webui.tar.gz` | `npm run build:package`（`webui-log`），或上面同一次发布构建 |
-| `config_rust.zip` | 全新安装配置包（见 [release.md](release.md)“带配置包的发版顺序”第 7 步） |
-| `sing-box-linux-amd64.tar.gz` | 由下面的打包脚本从定制版 sing-box（`DefaWong/sing-box`）编译 |
-| `SHA256SUMS` | 由打包脚本生成 |
+| `atomdns-linux-amd64-musl.tar.gz` | `scripts/build-rust-release.sh`（`VARIANTS="amd64 amd64-v3 amd64-musl"`） |
+| `atomdns-webui.tar.gz` | 同上 |
+| `config_rust.zip` | 由 `scripts/installer-assets.json` 的 `config_full` 指定，下载后按其中的 sha256 校验 |
+| `sing-box-linux-amd64.tar.gz` | 按 `scripts/installer-assets.json` 的 `singbox` 固定的仓库和提交检出定制版 sing-box，用该仓库 `go.mod` 里的 Go 版本编译 |
+| `SHA256SUMS` | 由 `scripts/package-installer-assets.sh` 生成 |
+
+同一个构建产物里还有在线更新要用的 `atomdns-linux-amd64.tar.gz`、`-amd64-v3.tar.gz` 和 `atomdns-update-manifest.json`。这些文件和上表的资产一起放在名为 `release-<tag>` 的 artifact 里，直接全部上传到 Release 即可。
+
+### 更新 sing-box
+
+定制版 sing-box 在 `DefaWong/sing-box` 的默认分支 `atomdns` 上。这个分支只追加提交，不 rebase，所以固定下来的提交号一直有效。
+
+1. 在 sing-box 仓库提交并推送到 `atomdns` 分支。
+2. 把新的完整提交号写进 `scripts/installer-assets.json` 的 `singbox.commit`；如果 sing-box 的基础版本变了，同时改 `singbox.version`。然后提交 atomdns。
+3. 发版时运行 `release-build.yml`。
+
+sing-box 的版本号形如 `<singbox.version>-atomdns.<提交号前 10 位>`，例如 `1.14.4-reF1nd-atomdns.1c29dbce59`。
+
+### 本地打包
+
+打包脚本要求 `SINGBOX_SRC` 正好检出在固定的提交上，并且没有未提交的改动；`CONFIG_ZIP` 的 sha256 也必须和固定值一致：
 
 ```bash
 ATOMDNS_MUSL_TGZ=release/rust/atomdns-linux-amd64-musl.tar.gz \
@@ -119,6 +135,4 @@ SINGBOX_SRC=/path/to/sing-box \
   scripts/package-installer-assets.sh release/installer
 ```
 
-sing-box 用它仓库 `release/DEFAULT_BUILD_TAGS_OTHERS` 里的编译标签，版本号形如 `1.14.4-reF1nd-atomdns.<提交>`。
-
-打包脚本只构建不发布。在 `DefaWong/atomdns` 建 Release 时，上传 `release/installer` 下的全部文件，再加上 `atomdns-update-manifest.json` 和在线更新要用的程序包。建 Release 属于对外发布，需要先确认。
+打包脚本只构建不发布。在 `DefaWong/atomdns` 建 Release 属于对外发布，需要先确认。
