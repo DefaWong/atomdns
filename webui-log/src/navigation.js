@@ -22,7 +22,7 @@ export const NAV_MODULES = Object.freeze([
   { id: 'overview', label: '概览', icon: 'gauge', path: '/overview', items: [] },
   { id: 'logs', label: '日志', icon: 'list', path: '/logs', items: [] },
   { id: 'rules', label: '规则设置', icon: 'sliders', path: `/rules/${RULE_SECTIONS[0].id}`, items: RULE_SECTIONS.map(item => ({ ...item, path: `/rules/${item.id}` })) },
-  { id: 'sing-box', label: 'sing-box', icon: 'globe', path: '/sing-box', items: [] },
+  { id: 'sing-box', label: '代理', icon: 'globe', path: '/sing-box', items: [] },
   { id: 'system', label: '系统管理', icon: 'settings', path: '/system', items: [] }
 ])
 
@@ -32,7 +32,7 @@ export const PAGES = Object.freeze([
   { name: 'logs', path: '/logs', title: '日志' },
   { name: 'logs-diagnostic', path: '/logs/diagnostic', title: '诊断抓取' },
   ...RULE_SECTIONS.map(item => ({ name: `rules-${item.id}`, path: `/rules/${item.id}`, title: item.label })),
-  { name: 'sing-box', path: '/sing-box', title: 'sing-box 订阅与节点' },
+  { name: 'sing-box', path: '/sing-box', title: '代理订阅与节点' },
   { name: 'system', path: '/system', title: '系统管理' }
 ])
 

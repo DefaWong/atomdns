@@ -1,6 +1,11 @@
-# 一键安装（AtomDNS + 定制版 sing-box）
+# 一键安装（AtomDNS + 定制版 sing-box 或 mihomo）
 
-`scripts/install.sh` 会在一台机器上一次装好 AtomDNS 和定制版 sing-box，并把两边配好：AtomDNS 做唯一一次分流决策，sing-box 用 FakeIP 接住代理流量，按 AtomDNS 指定的出口转发。原理见 [native-singbox-integration.md](contracts/native-singbox-integration.md)。
+`scripts/install.sh` 会在一台机器上一次装好 AtomDNS 和一个定制版代理后端，并把两边配好：AtomDNS 做唯一一次分流决策，代理后端用 FakeIP 接住代理流量，按 AtomDNS 指定的出口转发。后端二选一：
+
+- **sing-box**（`DefaWong/sing-box`，基于 reF1nd 分支）：默认。
+- **mihomo**（`DefaWong/mihomo`，基于 MetaCubeX/mihomo 的 `Meta` 分支）：订阅原生支持 Clash YAML 和分享链接。
+
+两个后端用同一套协议和 AtomDNS 协作（EDNS0 Option 65001、`/atomdns/config` 管理接口、Clash API），WebUI 的「代理」页面、灰名单 `@出口` 和 `cusnocn` 出口绑定在两个后端上用法一样。原理见 [native-singbox-integration.md](contracts/native-singbox-integration.md)，mihomo 的差异见其中「mihomo 后端」一节。
 
 ## 用法
 
@@ -16,17 +21,26 @@ wget -qO- https://raw.githubusercontent.com/DefaWong/atomdns/main/scripts/instal
 
 脚本是 POSIX `sh`，`| bash` 也能用。必须以 root 运行。
 
+全新安装时脚本会在终端上询问用哪个后端（`curl ... | sh` 也能问，读的是 `/dev/tty`），直接回车选 sing-box。不想交互时用 `PROXY_BACKEND` 指定：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DefaWong/atomdns/main/scripts/install.sh | PROXY_BACKEND=mihomo sh
+```
+
+已经装过的机器重跑时沿用原来的后端，不会再问。
+
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
+| `PROXY_BACKEND` | 交互选择，无终端时 `sing-box` | `sing-box` 或 `mihomo` |
 | `ATOMDNS_RELEASE` | `latest` | 要安装的 Release tag |
 | `ATOMDNS_REPO` | `DefaWong/atomdns` | 下载 Release 的仓库 |
-| `ATOMDNS_ASSETS` | 空 | 本地目录，放好全部资产后不再下载（测试用） |
+| `ATOMDNS_ASSETS` | 空 | 本地目录，放好资产后不再下载（测试用；只需要所选后端的包） |
 | `ATOMDNS_ROOT` | `/cus/atomdns` | AtomDNS 配置根 |
-| `TPROXY_PORT` | `7895` | sing-box TProxy 端口 |
+| `TPROXY_PORT` | `7895` | 后端 TProxy 端口 |
 
 ## 支持的系统
 
-- x86_64（amd64）。两个系统用的都是静态 musl 版 AtomDNS，以及 CGO 关闭的静态 sing-box。
+- x86_64（amd64）。两个系统用的都是静态 musl 版 AtomDNS，以及 CGO 关闭的静态 sing-box 或 mihomo。
 - Alpine（OpenRC）：用 apk 安装依赖。
 - Debian 系（Debian、Ubuntu 等，systemd）：用 apt 安装依赖。
 
@@ -36,14 +50,15 @@ UDP 53 端口被其它程序占用（systemd-resolved 的 stub、dnsmasq 等）�
 
 | 内容 | 位置 |
 | --- | --- |
-| 程序 | `/usr/local/bin/atomdns`、`/usr/local/bin/sing-box` |
+| 程序 | `/usr/local/bin/atomdns`，以及 `/usr/local/bin/sing-box` 或 `/usr/local/bin/mihomo` |
 | AtomDNS 配置 | `/cus/atomdns`（来自 `config_rust.zip`，`ui/main` 换成本 Release 的 WebUI） |
-| AtomDNS 设置 | `/cus/atomdns/webinfo/settings.json`（权限 600）：`main_proxy` 指向 sing-box 的 mixed 入口，sing-box API 的地址和密钥 |
+| AtomDNS 设置 | `/cus/atomdns/webinfo/settings.json`（权限 600）：`main_proxy` 指向后端的 mixed 入口，后端 API 的地址和密钥（字段名沿用 `singbox_api`） |
 | sing-box 配置 | `/etc/sing-box/config.json`（权限 600），状态在 `/var/lib/sing-box` |
-| TProxy 规则 | `/usr/local/lib/atomdns/tproxy.sh`，由 sing-box 服务在启动时加载、停止时撤销 |
-| 服务 | OpenRC：`/etc/init.d/{sing-box,atomdns}`；systemd：`/etc/systemd/system/{sing-box,atomdns}.service`；都设为开机自启 |
+| mihomo 配置 | `/etc/mihomo/config.yaml`（权限 600），状态（`cache.db`、订阅缓存）在 `/var/lib/mihomo`，以 `mihomo -d /var/lib/mihomo -f /etc/mihomo/config.yaml` 运行 |
+| TProxy 规则 | `/usr/local/lib/atomdns/tproxy.sh`，由后端服务在启动时加载、停止时撤销 |
+| 服务 | OpenRC：`/etc/init.d/{<后端>,atomdns}`；systemd：`/etc/systemd/system/{<后端>,atomdns}.service`；都设为开机自启 |
 
-sing-box API 的密钥是安装时随机生成的，同时写进 sing-box 配置和 AtomDNS 设置。
+后端 API 的密钥是安装时随机生成的，同时写进后端配置和 AtomDNS 设置。
 
 端口：
 
@@ -51,12 +66,14 @@ sing-box API 的密钥是安装时随机生成的，同时写进 sing-box 配置
 | --- | --- | --- |
 | `:53` | AtomDNS | DNS |
 | `:9099` | AtomDNS | WebUI 和 API |
-| `127.0.0.1:6666` | sing-box | FakeIP DNS（AtomDNS 的 `nocnfake` 上游） |
-| `127.0.0.1:9666` | sing-box | mixed 代理（AtomDNS 的 `main_proxy`） |
-| `127.0.0.1:9090` | sing-box | Clash API（带密钥） |
-| `:7895` | sing-box | TProxy 入口 |
+| `127.0.0.1:6666` | 后端 | FakeIP DNS（AtomDNS 的 `nocnfake` 上游） |
+| `127.0.0.1:9666` | 后端 | mixed 代理（AtomDNS 的 `main_proxy`） |
+| `127.0.0.1:9090` | 后端 | Clash API（带密钥） |
+| `:7895` | 后端 | TProxy 入口 |
 
-新装的 sing-box 配置里，`proxy` 分组只有 `direct`。在 WebUI 的 sing-box 页面添加节点或订阅之后，分组会按 AtomDNS 的节点列表重建。
+两个后端用的端口完全一样，所以 AtomDNS 的配置不随后端变化。
+
+新装的后端配置里，`proxy` 分组只有直连（sing-box 的 `direct`，mihomo 内置的 `DIRECT`）。在 WebUI 的「代理」页面添加节点或订阅之后，分组会按 AtomDNS 的节点列表重建。
 
 ## 主路由怎么配
 
@@ -65,39 +82,43 @@ sing-box API 的密钥是安装时随机生成的，同时写进 sing-box 配置
 1. 让客户端用这台机器做 DNS 服务器。
 2. 把 FakeIP 网段 `198.18.0.0/15` 和 `fc00::/18` 路由到这台机器，可以用静态路由，也可以用策略路由。
 
-到达这台机器、目标是 FakeIP 的 TCP/UDP 流量，会被 nftables 的 TProxy 交给 sing-box：
+到达这台机器、目标是 FakeIP 的 TCP/UDP 流量，会被 nftables 的 TProxy 交给代理后端：
 
 - `table inet atomdns_tproxy`，打 fwmark `0x1d`。
 - 策略路由走表 `233`。
 
-sing-box 按 FakeIP 反查出域名和绑定的出口：有绑定就直接走这个出口，没有就走 `proxy` 分组。本机自己发出的流量不经过 TProxy。
+后端按 FakeIP 反查出域名和绑定的出口：有绑定就直接走这个出口，没有就走 `proxy` 分组。本机自己发出的流量不经过 TProxy。
 
 ## 重复运行（升级）
 
 再跑一次脚本会：
 
+- 沿用已装的后端（有 `/etc/mihomo/config.yaml` 就是 mihomo，否则有 `/etc/sing-box/config.json` 就是 sing-box）。
 - 更新两个程序、WebUI、服务文件和 TProxy 脚本。
-- 保留 `/cus/atomdns` 下已有的配置、`webinfo/settings.json` 和 `/etc/sing-box/config.json`，sing-box API 的密钥继续沿用。
+- 保留 `/cus/atomdns` 下已有的配置、`webinfo/settings.json` 和后端配置，后端 API 的密钥继续沿用。
 
-AtomDNS 的在线更新源是 `DefaWong/atomdns` 的 Release（`update/mod.rs`）。在线更新只更新 AtomDNS 和 WebUI，sing-box 要重跑安装脚本才会更新。
+不支持原地换后端：要换，先按下面的步骤卸载（包括 `/cus/atomdns`），再用新的 `PROXY_BACKEND` 全新安装。
+
+AtomDNS 的在线更新源是 `DefaWong/atomdns` 的 Release（`update/mod.rs`）。在线更新只更新 AtomDNS 和 WebUI，代理后端要重跑安装脚本才会更新。
 
 ## 卸载
 
 ```sh
+# BACKEND=sing-box 或 BACKEND=mihomo
 # Alpine
-rc-service atomdns stop; rc-service sing-box stop
-rc-update del atomdns default; rc-update del sing-box default
-rm -f /etc/init.d/atomdns /etc/init.d/sing-box
+rc-service atomdns stop; rc-service $BACKEND stop
+rc-update del atomdns default; rc-update del $BACKEND default
+rm -f /etc/init.d/atomdns /etc/init.d/$BACKEND
 # Debian 系
-systemctl disable --now atomdns sing-box
-rm -f /etc/systemd/system/atomdns.service /etc/systemd/system/sing-box.service && systemctl daemon-reload
+systemctl disable --now atomdns $BACKEND
+rm -f /etc/systemd/system/atomdns.service /etc/systemd/system/$BACKEND.service && systemctl daemon-reload
 # 两种系统都要执行
-rm -rf /usr/local/bin/atomdns /usr/local/bin/sing-box /usr/local/lib/atomdns
+rm -rf /usr/local/bin/atomdns /usr/local/bin/$BACKEND /usr/local/lib/atomdns
 # 配置和数据，确认不再需要后再删
-rm -rf /cus/atomdns /etc/sing-box /var/lib/sing-box
+rm -rf /cus/atomdns /etc/$BACKEND /var/lib/$BACKEND
 ```
 
-停止 sing-box 服务时 TProxy 规则就已经撤销了。
+停止后端服务时 TProxy 规则就已经撤销了。
 
 ## Release 资产
 
@@ -108,8 +129,11 @@ rm -rf /cus/atomdns /etc/sing-box /var/lib/sing-box
 | `atomdns-linux-amd64-musl.tar.gz` | `scripts/build-rust-release.sh`（`VARIANTS="amd64 amd64-v3 amd64-musl"`） |
 | `atomdns-webui.tar.gz` | 同上 |
 | `config_rust.zip` | 由 `scripts/installer-assets.json` 的 `config_full` 指定，下载后按其中的 sha256 校验 |
-| `sing-box-linux-amd64.tar.gz` | 按 `scripts/installer-assets.json` 的 `singbox` 固定的仓库和提交检出定制版 sing-box，用该仓库 `go.mod` 里的 Go 版本编译 |
-| `SHA256SUMS` | 由 `scripts/package-installer-assets.sh` 生成 |
+| `sing-box-linux-amd64.tar.gz` | 按 `scripts/installer-assets.json` 的 `singbox` 固定的仓库和提交检出定制版 sing-box 编译 |
+| `mihomo-linux-amd64.tar.gz` | 按 `scripts/installer-assets.json` 的 `mihomo` 固定的仓库和提交检出定制版 mihomo，用 mihomo 自己 Makefile 的参数（`-tags with_gvisor`）编译 |
+| `SHA256SUMS` | 由 `scripts/package-installer-assets.sh` 生成，同时列出两个后端的包；安装时只下载、校验所选后端的那个 |
+
+两个后端都用 Go 1.26 编译：mihomo 的 `go.mod` 只写了最低版本 1.20，上游 Release 用 1.26；它也满足 sing-box `go.mod` 要求的 1.25.5。
 
 同一个构建产物里还有在线更新要用的 `atomdns-linux-amd64.tar.gz`、`-amd64-v3.tar.gz` 和 `atomdns-update-manifest.json`。这些文件和上表的资产一起放在名为 `release-<tag>` 的 artifact 里，直接全部上传到 Release 即可。
 
@@ -123,15 +147,20 @@ rm -rf /cus/atomdns /etc/sing-box /var/lib/sing-box
 
 sing-box 的版本号形如 `<singbox.version>-atomdns.<提交号前 10 位>`，例如 `1.14.4-reF1nd-atomdns.1c29dbce59`。
 
+### 更新 mihomo
+
+定制版 mihomo 在 `DefaWong/mihomo` 的 `atomdns` 分支上，基于上游 `Meta` 分支（当前是 v1.19.33），同样只追加提交。步骤和 sing-box 一样，改的是 `mihomo.commit` 和 `mihomo.version`。跟进上游新版本时把上游 `Meta` 合并进 `atomdns` 分支，不要 rebase。版本号形如 `1.19.33-atomdns.<提交号前 10 位>`。
+
 ### 本地打包
 
-打包脚本要求 `SINGBOX_SRC` 正好检出在固定的提交上，并且没有未提交的改动；`CONFIG_ZIP` 的 sha256 也必须和固定值一致：
+打包脚本要求 `SINGBOX_SRC` 和 `MIHOMO_SRC` 都正好检出在固定的提交上，并且没有未提交的改动；`CONFIG_ZIP` 的 sha256 也必须和固定值一致：
 
 ```bash
 ATOMDNS_MUSL_TGZ=release/rust/atomdns-linux-amd64-musl.tar.gz \
 WEBUI_TGZ=release/rust/atomdns-webui.tar.gz \
 CONFIG_ZIP=/path/to/config_rust.zip \
 SINGBOX_SRC=/path/to/sing-box \
+MIHOMO_SRC=/path/to/mihomo \
   scripts/package-installer-assets.sh release/installer
 ```
 

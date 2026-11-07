@@ -79,29 +79,52 @@ pub(crate) struct SingboxNode {
     pub(crate) enabled: bool,
 }
 
+/// The key that names a node in the backend's native config: sing-box
+/// outbounds use `tag`, mihomo proxies use `name`.
+const SINGBOX_NAME_KEY: &str = "tag";
+const MIHOMO_NAME_KEY: &str = "name";
+
 impl SingboxNode {
+    /// The node as a sing-box outbound.
     pub(crate) fn outbound(&self) -> serde_json::Value {
-        let mut outbound = self.options.clone();
-        outbound.insert(
-            "type".to_owned(),
-            serde_json::Value::String(self.kind.clone()),
-        );
-        outbound.insert(
-            "tag".to_owned(),
-            serde_json::Value::String(self.tag.clone()),
-        );
-        serde_json::Value::Object(outbound)
+        self.native(SINGBOX_NAME_KEY)
     }
 
     pub(crate) fn from_outbound(outbound: &serde_json::Value) -> Option<Self> {
-        let object = outbound.as_object()?;
-        let tag = object.get("tag")?.as_str()?.to_owned();
+        Self::from_native(outbound, SINGBOX_NAME_KEY)
+    }
+
+    /// The node as a mihomo proxy.
+    pub(crate) fn mihomo_proxy(&self) -> serde_json::Value {
+        self.native(MIHOMO_NAME_KEY)
+    }
+
+    pub(crate) fn from_mihomo_proxy(proxy: &serde_json::Value) -> Option<Self> {
+        Self::from_native(proxy, MIHOMO_NAME_KEY)
+    }
+
+    fn native(&self, name_key: &str) -> serde_json::Value {
+        let mut native = self.options.clone();
+        native.insert(
+            "type".to_owned(),
+            serde_json::Value::String(self.kind.clone()),
+        );
+        native.insert(
+            name_key.to_owned(),
+            serde_json::Value::String(self.tag.clone()),
+        );
+        serde_json::Value::Object(native)
+    }
+
+    fn from_native(native: &serde_json::Value, name_key: &str) -> Option<Self> {
+        let object = native.as_object()?;
+        let tag = object.get(name_key)?.as_str()?.to_owned();
         let kind = object.get("type")?.as_str()?.to_owned();
         if tag.is_empty() || tag.contains('/') || kind.is_empty() {
             return None;
         }
         let mut options = object.clone();
-        options.remove("tag");
+        options.remove(name_key);
         options.remove("type");
         options.remove("enabled");
         Some(Self {

@@ -1,20 +1,24 @@
 #!/bin/sh
-# One-step installer for AtomDNS + the customized sing-box (DefaWong/atomdns).
+# One-step installer for AtomDNS + a customized proxy backend (DefaWong/atomdns):
+# sing-box (DefaWong/sing-box) or mihomo (DefaWong/mihomo).
 #
 #   curl -fsSL https://raw.githubusercontent.com/DefaWong/atomdns/main/scripts/install.sh | sh
 #   wget -qO- https://raw.githubusercontent.com/DefaWong/atomdns/main/scripts/install.sh | sh
 #
-# Supports Alpine (OpenRC) and Debian/Ubuntu (systemd) on x86_64. Installs both programs,
-# a fresh AtomDNS configuration (sing-box FakeIP upstream, sing-box API pre-wired) and a
-# sing-box configuration with a TProxy inbound for the FakeIP ranges. Re-running upgrades
-# the programs and the WebUI but keeps existing configuration.
+# Supports Alpine (OpenRC) and Debian/Ubuntu (systemd) on x86_64. Installs AtomDNS and the
+# chosen proxy backend, a fresh AtomDNS configuration (backend FakeIP upstream, backend API
+# pre-wired) and a backend configuration with a TProxy inbound for the FakeIP ranges. Both
+# backends speak the same protocol to AtomDNS, so the WebUI and the rules work the same way.
+# Re-running upgrades the programs and the WebUI but keeps existing configuration and the
+# installed backend.
 #
 # Environment overrides:
+#   PROXY_BACKEND     sing-box or mihomo; asked on the terminal when unset (default: sing-box)
 #   ATOMDNS_RELEASE   release tag to install (default: latest)
 #   ATOMDNS_REPO      GitHub repository (default: DefaWong/atomdns)
 #   ATOMDNS_ASSETS    local directory holding the release assets instead of downloading
 #   ATOMDNS_ROOT      AtomDNS configuration root (default: /cus/atomdns)
-#   TPROXY_PORT       sing-box TProxy port (default: 7895)
+#   TPROXY_PORT       backend TProxy port (default: 7895)
 set -eu
 
 REPO="${ATOMDNS_REPO:-DefaWong/atomdns}"
@@ -23,6 +27,8 @@ ROOT="${ATOMDNS_ROOT:-/cus/atomdns}"
 TPROXY_PORT="${TPROXY_PORT:-7895}"
 SINGBOX_DIR=/etc/sing-box
 SINGBOX_STATE=/var/lib/sing-box
+MIHOMO_DIR=/etc/mihomo
+MIHOMO_STATE=/var/lib/mihomo
 LIB_DIR=/usr/local/lib/atomdns
 BIN_DIR=/usr/local/bin
 FAKEIP4=198.18.0.0/15
@@ -51,6 +57,63 @@ elif [ -f /etc/debian_version ]; then
 else
 	die "unsupported system: only Alpine and Debian/Ubuntu are supported"
 fi
+
+# --- proxy backend --------------------------------------------------------------------
+
+# An existing installation keeps its backend; a new one asks on the terminal, which also
+# works under `curl ... | sh`.
+choose_backend() {
+	BACKEND="${PROXY_BACKEND:-}"
+	if [ -z "$BACKEND" ]; then
+		if [ -f "${MIHOMO_DIR}/config.yaml" ]; then
+			BACKEND=mihomo
+		elif [ -f "${SINGBOX_DIR}/config.json" ]; then
+			BACKEND=sing-box
+		elif (: </dev/tty) 2>/dev/null; then
+			printf 'Proxy backend: 1) sing-box  2) mihomo [1]: ' >/dev/tty
+			read -r answer </dev/tty || answer=""
+			case "$answer" in
+			2 | mihomo) BACKEND=mihomo ;;
+			*) BACKEND=sing-box ;;
+			esac
+		else
+			BACKEND=sing-box
+		fi
+	fi
+	case "$BACKEND" in
+	sing-box) PROXY_CONFIG="${SINGBOX_DIR}/config.json" ;;
+	mihomo) PROXY_CONFIG="${MIHOMO_DIR}/config.yaml" ;;
+	*) die "PROXY_BACKEND must be sing-box or mihomo, not ${BACKEND}" ;;
+	esac
+	PROXY_BIN="${BIN_DIR}/${BACKEND}"
+	PROXY_LOG="/var/log/${BACKEND}.log"
+	log "proxy backend: ${BACKEND}"
+}
+
+# The backend's check, run and version commands.
+proxy_check() {
+	if [ "$BACKEND" = mihomo ]; then
+		"$1" -t -d "$MIHOMO_STATE" -f "$PROXY_CONFIG"
+	else
+		"$1" check -c "$PROXY_CONFIG"
+	fi
+}
+
+proxy_run_args() {
+	if [ "$BACKEND" = mihomo ]; then
+		echo "-d ${MIHOMO_STATE} -f ${PROXY_CONFIG}"
+	else
+		echo "run -c ${PROXY_CONFIG}"
+	fi
+}
+
+proxy_version() {
+	if [ "$BACKEND" = mihomo ]; then
+		"$1" -v
+	else
+		"$1" version
+	fi
+}
 
 install_packages() {
 	log "installing dependencies"
@@ -87,12 +150,12 @@ check_dns_port() {
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT INT TERM
 
-ASSETS="atomdns-linux-amd64-musl.tar.gz sing-box-linux-amd64.tar.gz atomdns-webui.tar.gz config_rust.zip SHA256SUMS"
-
 fetch_assets() {
+	# Only the chosen backend is downloaded; SHA256SUMS lists both.
+	FILES="atomdns-linux-amd64-musl.tar.gz ${BACKEND}-linux-amd64.tar.gz atomdns-webui.tar.gz config_rust.zip"
 	if [ -n "${ATOMDNS_ASSETS:-}" ]; then
 		log "using local assets from ${ATOMDNS_ASSETS}"
-		for asset in $ASSETS; do
+		for asset in $FILES SHA256SUMS; do
 			cp "${ATOMDNS_ASSETS}/${asset}" "$WORK/" || die "missing ${ATOMDNS_ASSETS}/${asset}"
 		done
 	else
@@ -102,30 +165,34 @@ fetch_assets() {
 			base="https://github.com/${REPO}/releases/download/${RELEASE}"
 		fi
 		log "downloading ${REPO} ${RELEASE}"
-		for asset in $ASSETS; do
+		for asset in $FILES SHA256SUMS; do
 			curl -fsSL --retry 3 -o "$WORK/${asset}" "${base}/${asset}" || die "download failed: ${base}/${asset}"
 		done
 	fi
-	(cd "$WORK" && sha256sum -c SHA256SUMS >/dev/null) || die "sha256 verification failed"
+	for file in $FILES; do
+		grep -q "  ${file}\$" "$WORK/SHA256SUMS" || die "SHA256SUMS does not list ${file}"
+	done
+	(cd "$WORK" && for file in $FILES; do grep "  ${file}\$" SHA256SUMS; done | sha256sum -c - >/dev/null) ||
+		die "sha256 verification failed"
 }
 
 # --- programs -------------------------------------------------------------------------
 
 install_programs() {
 	log "installing programs to ${BIN_DIR}"
-	mkdir -p "$WORK/atomdns" "$WORK/sing-box"
+	mkdir -p "$WORK/atomdns" "$WORK/proxy"
 	tar -xzf "$WORK/atomdns-linux-amd64-musl.tar.gz" -C "$WORK/atomdns"
-	tar -xzf "$WORK/sing-box-linux-amd64.tar.gz" -C "$WORK/sing-box"
+	tar -xzf "$WORK/${BACKEND}-linux-amd64.tar.gz" -C "$WORK/proxy"
 	install -m 0755 "$WORK/atomdns/atomdns" "${BIN_DIR}/atomdns.new"
-	install -m 0755 "$WORK/sing-box/sing-box" "${BIN_DIR}/sing-box.new"
+	install -m 0755 "$WORK/proxy/${BACKEND}" "${PROXY_BIN}.new"
 	"${BIN_DIR}/atomdns.new" version >/dev/null || die "the downloaded atomdns does not run here"
-	"${BIN_DIR}/sing-box.new" version >/dev/null || die "the downloaded sing-box does not run here"
+	proxy_version "${PROXY_BIN}.new" >/dev/null || die "the downloaded ${BACKEND} does not run here"
 }
 
 # Swapped in only while the services are stopped.
 activate_programs() {
 	mv -f "${BIN_DIR}/atomdns.new" "${BIN_DIR}/atomdns"
-	mv -f "${BIN_DIR}/sing-box.new" "${BIN_DIR}/sing-box"
+	mv -f "${PROXY_BIN}.new" "$PROXY_BIN"
 }
 
 random_secret() {
@@ -149,6 +216,8 @@ install_atomdns_config() {
 	rm -rf "${ROOT}/ui/main"
 	mv "${ROOT}/ui/main.new" "${ROOT}/ui/main"
 
+	# Both backends serve the Clash API on the same port; the settings key keeps its
+	# historical sing-box name.
 	if [ ! -f "${ROOT}/webinfo/settings.json" ]; then
 		mkdir -p "${ROOT}/webinfo"
 		umask 077
@@ -162,13 +231,13 @@ install_atomdns_config() {
   },
   "singbox_api": {
     "addr": "http://127.0.0.1:${API_PORT}",
-    "secret": "${SINGBOX_SECRET}"
+    "secret": "${PROXY_SECRET}"
   }
 }
 EOF
 		umask 022
 	fi
-	# It holds the sing-box API secret.
+	# It holds the backend API secret.
 	chmod 0600 "${ROOT}/webinfo/settings.json"
 }
 
@@ -177,13 +246,13 @@ EOF
 install_singbox_config() {
 	mkdir -p "$SINGBOX_DIR" "$SINGBOX_STATE"
 	chmod 0700 "$SINGBOX_DIR" "$SINGBOX_STATE"
-	if [ -f "${SINGBOX_DIR}/config.json" ]; then
+	if [ -f "$PROXY_CONFIG" ]; then
 		log "keeping existing sing-box configuration in ${SINGBOX_DIR}"
 		return
 	fi
 	log "creating sing-box configuration in ${SINGBOX_DIR}"
 	umask 077
-	cat >"${SINGBOX_DIR}/config.json" <<EOF
+	cat >"$PROXY_CONFIG" <<EOF
 {
   "log": {"level": "info", "timestamp": true},
   "dns": {
@@ -214,21 +283,79 @@ install_singbox_config() {
   },
   "experimental": {
     "cache_file": {"enabled": true, "path": "${SINGBOX_STATE}/cache.db", "store_fakeip": true},
-    "clash_api": {"external_controller": "127.0.0.1:${API_PORT}", "secret": "${SINGBOX_SECRET}"}
+    "clash_api": {"external_controller": "127.0.0.1:${API_PORT}", "secret": "${PROXY_SECRET}"}
   }
 }
 EOF
 	umask 022
-	"${BIN_DIR}/sing-box.new" check -c "${SINGBOX_DIR}/config.json" || die "generated sing-box configuration is invalid"
+	proxy_check "${PROXY_BIN}.new" || die "generated sing-box configuration is invalid"
+}
+
+# --- mihomo configuration -------------------------------------------------------------
+
+# AtomDNS owns proxies, proxy-providers and the proxy group through the backend API; the
+# rest is the fixed AtomDNS topology. AtomDNS sends only the FakeIP domains here.
+install_mihomo_config() {
+	mkdir -p "$MIHOMO_DIR" "$MIHOMO_STATE"
+	chmod 0700 "$MIHOMO_DIR" "$MIHOMO_STATE"
+	if [ -f "$PROXY_CONFIG" ]; then
+		log "keeping existing mihomo configuration in ${MIHOMO_DIR}"
+		return
+	fi
+	log "creating mihomo configuration in ${MIHOMO_DIR}"
+	umask 077
+	cat >"$PROXY_CONFIG" <<EOF
+log-level: info
+mode: rule
+ipv6: true
+allow-lan: false
+find-process-mode: "off"
+geo-auto-update: false
+external-controller: 127.0.0.1:${API_PORT}
+secret: "${PROXY_SECRET}"
+profile:
+  store-selected: true
+  store-fake-ip: true
+dns:
+  enable: true
+  listen: 127.0.0.1:${FAKEIP_DNS_PORT}
+  ipv6: true
+  enhanced-mode: fake-ip
+  fake-ip-range: ${FAKEIP4}
+  fake-ip-range6: ${FAKEIP6}
+  default-nameserver: [223.5.5.5]
+  nameserver: [223.5.5.5]
+listeners:
+  - {name: atomdns-proxy-in, type: mixed, listen: 127.0.0.1, port: ${MIXED_PORT}}
+  - {name: tproxy-in, type: tproxy, listen: "::", port: ${TPROXY_PORT}, udp: true}
+proxy-groups:
+  - {name: proxy, type: select, proxies: [DIRECT]}
+rules:
+  - MATCH,proxy
+EOF
+	umask 022
+	proxy_check "${PROXY_BIN}.new" || die "generated mihomo configuration is invalid"
+}
+
+install_proxy_config() {
+	if [ "$BACKEND" = mihomo ]; then
+		install_mihomo_config
+	else
+		install_singbox_config
+	fi
 }
 
 # Reuse the secret of an existing installation so both sides keep matching.
 load_secret() {
-	SINGBOX_SECRET=""
-	if [ -f "${SINGBOX_DIR}/config.json" ]; then
-		SINGBOX_SECRET="$(sed -n 's/.*"secret"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${SINGBOX_DIR}/config.json" | head -n 1)"
+	PROXY_SECRET=""
+	if [ -f "$PROXY_CONFIG" ]; then
+		if [ "$BACKEND" = mihomo ]; then
+			PROXY_SECRET="$(sed -n 's/^secret:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$PROXY_CONFIG" | head -n 1)"
+		else
+			PROXY_SECRET="$(sed -n 's/.*"secret"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PROXY_CONFIG" | head -n 1)"
+		fi
 	fi
-	[ -n "$SINGBOX_SECRET" ] || SINGBOX_SECRET="$(random_secret)"
+	[ -n "$PROXY_SECRET" ] || PROXY_SECRET="$(random_secret)"
 }
 
 # --- TProxy ---------------------------------------------------------------------------
@@ -237,8 +364,8 @@ install_tproxy_helper() {
 	mkdir -p "$LIB_DIR"
 	cat >"${LIB_DIR}/tproxy.sh" <<EOF
 #!/bin/sh
-# Sends traffic routed to this host for the FakeIP ranges to the sing-box TProxy inbound.
-# Installed by the AtomDNS installer; run by the sing-box service on start and stop.
+# Sends traffic routed to this host for the FakeIP ranges to the ${BACKEND} TProxy inbound.
+# Installed by the AtomDNS installer; run by the ${BACKEND} service on start and stop.
 PORT=${TPROXY_PORT}
 MARK=${TPROXY_MARK}
 TABLE=${TPROXY_TABLE}
@@ -285,19 +412,27 @@ EOF
 
 install_services() {
 	log "installing services"
+	run_args="$(proxy_run_args)"
+	if [ "$BACKEND" = mihomo ]; then
+		check_cmd="${PROXY_BIN} -t ${run_args}"
+		reload_cmd=""
+	else
+		check_cmd="${PROXY_BIN} check -c ${PROXY_CONFIG}"
+		reload_cmd="ExecReload=/bin/kill -HUP \$MAINPID"
+	fi
 	if [ "$OS" = alpine ]; then
-		cat >/etc/init.d/sing-box <<EOF
+		cat >"/etc/init.d/${BACKEND}" <<EOF
 #!/sbin/openrc-run
-name="sing-box"
-description="sing-box proxy for AtomDNS"
+name="${BACKEND}"
+description="${BACKEND} proxy for AtomDNS"
 supervisor=supervise-daemon
-command="${BIN_DIR}/sing-box"
-command_args="run -c ${SINGBOX_DIR}/config.json"
+command="${PROXY_BIN}"
+command_args="${run_args}"
 pidfile="/run/\${RC_SVCNAME}.pid"
 respawn_delay=3
 respawn_max=0
-output_log="/var/log/sing-box.log"
-error_log="/var/log/sing-box.log"
+output_log="${PROXY_LOG}"
+error_log="${PROXY_LOG}"
 
 depend() {
 	need net
@@ -306,7 +441,7 @@ depend() {
 }
 
 start_pre() {
-	"\${command}" check -c ${SINGBOX_DIR}/config.json && ${LIB_DIR}/tproxy.sh start
+	${check_cmd} && ${LIB_DIR}/tproxy.sh start
 }
 
 stop_post() {
@@ -328,26 +463,26 @@ error_log="/var/log/atomdns.log"
 
 depend() {
 	need net
-	after firewall sing-box
+	after firewall ${BACKEND}
 }
 EOF
-		chmod 0755 /etc/init.d/sing-box /etc/init.d/atomdns
-		rc-update add sing-box default >/dev/null
+		chmod 0755 "/etc/init.d/${BACKEND}" /etc/init.d/atomdns
+		rc-update add "$BACKEND" default >/dev/null
 		rc-update add atomdns default >/dev/null
 	else
-		cat >/etc/systemd/system/sing-box.service <<EOF
+		cat >"/etc/systemd/system/${BACKEND}.service" <<EOF
 [Unit]
-Description=sing-box proxy for AtomDNS
+Description=${BACKEND} proxy for AtomDNS
 After=network-online.target
 Wants=network-online.target
 Before=atomdns.service
 
 [Service]
-ExecStartPre=${BIN_DIR}/sing-box check -c ${SINGBOX_DIR}/config.json
+ExecStartPre=${check_cmd}
 ExecStartPre=${LIB_DIR}/tproxy.sh start
-ExecStart=${BIN_DIR}/sing-box run -c ${SINGBOX_DIR}/config.json
+ExecStart=${PROXY_BIN} ${run_args}
 ExecStopPost=${LIB_DIR}/tproxy.sh stop
-ExecReload=/bin/kill -HUP \$MAINPID
+${reload_cmd}
 Restart=always
 RestartSec=3
 LimitNOFILE=1048576
@@ -358,7 +493,7 @@ EOF
 		cat >/etc/systemd/system/atomdns.service <<EOF
 [Unit]
 Description=AtomDNS DNS server and WebUI
-After=network-online.target sing-box.service
+After=network-online.target ${BACKEND}.service
 Wants=network-online.target
 
 [Service]
@@ -371,42 +506,43 @@ LimitNOFILE=1048576
 WantedBy=multi-user.target
 EOF
 		systemctl daemon-reload
-		systemctl enable sing-box atomdns >/dev/null 2>&1
+		systemctl enable "$BACKEND" atomdns >/dev/null 2>&1
 	fi
 }
 
 stop_services() {
 	if [ "$OS" = alpine ]; then
-		for service in atomdns sing-box; do
+		for service in atomdns "$BACKEND"; do
 			[ -x "/etc/init.d/${service}" ] && rc-service "$service" stop >/dev/null 2>&1 || true
 		done
 	else
-		systemctl stop atomdns sing-box >/dev/null 2>&1 || true
+		systemctl stop atomdns "$BACKEND" >/dev/null 2>&1 || true
 	fi
 }
 
 start_services() {
-	log "starting sing-box and AtomDNS"
+	log "starting ${BACKEND} and AtomDNS"
 	if [ "$OS" = alpine ]; then
-		rc-service sing-box start >/dev/null
+		rc-service "$BACKEND" start >/dev/null
 		rc-service atomdns start >/dev/null
 	else
-		systemctl start sing-box
+		systemctl start "$BACKEND"
 		systemctl start atomdns
 	fi
 	sleep 2
-	service_running sing-box || die "sing-box did not start; see /var/log/sing-box.log or journalctl -u sing-box"
+	service_running "$BACKEND" || die "${BACKEND} did not start; see ${PROXY_LOG} or journalctl -u ${BACKEND}"
 	service_running atomdns || die "AtomDNS did not start; see /var/log/atomdns.log or journalctl -u atomdns"
 }
 
 # --- main -----------------------------------------------------------------------------
 
+choose_backend
 install_packages
 check_dns_port
 fetch_assets
 install_programs
 load_secret
-install_singbox_config
+install_proxy_config
 install_tproxy_helper
 stop_services
 activate_programs
@@ -419,7 +555,7 @@ ADDR="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if 
 ADDR="${ADDR:-<this-host>}"
 cat <<EOF
 
-AtomDNS $("${BIN_DIR}/atomdns" version) and $("${BIN_DIR}/sing-box" version | head -n 1) are running.
+AtomDNS $("${BIN_DIR}/atomdns" version) and $(proxy_version "$PROXY_BIN" | head -n 1) are running.
 
   WebUI:  http://${ADDR}:9099/
   DNS:    ${ADDR}:53
@@ -427,7 +563,7 @@ AtomDNS $("${BIN_DIR}/atomdns" version) and $("${BIN_DIR}/sing-box" version | he
 Next steps:
   1. Give this host a fixed IP (static address or a DHCP reservation): clients use
      it as their DNS server and the FakeIP routes point at it.
-  2. Add proxy nodes or subscriptions in the WebUI under sing-box.
+  2. Add proxy nodes or subscriptions in the WebUI under 代理.
   3. On the main router, use ${ADDR} as the clients' DNS server and route
      ${FAKEIP4} and ${FAKEIP6} to ${ADDR} (static route or policy routing).
 EOF

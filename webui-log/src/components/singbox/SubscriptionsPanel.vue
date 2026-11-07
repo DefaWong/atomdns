@@ -53,7 +53,7 @@ async function remove(row) {
   busy.value = row.name
   try {
     await deleteRequest(`/api/v1/singbox/subscriptions/${encodeURIComponent(row.name)}`)
-    setSuccess('订阅已删除，sing-box 配置已重载')
+    setSuccess('订阅已删除，代理后端配置已重载')
     emit('changed')
   } catch (error) { setError(`删除订阅失败: ${error.message}`) } finally { busy.value = '' }
 }
@@ -65,7 +65,7 @@ async function remove(row) {
       <div class="rt-list-title"><h3>订阅列表</h3><span class="muted rt-list-count">共 {{ subscriptions.length }} 条</span></div>
       <button class="btn primary" type="button" @click="beginAdd">新增订阅</button>
     </header>
-    <p class="muted rt-list-hint">支持 sing-box 原生订阅、Clash、SIP008 和分享链接格式。更新下载及节点健康检查由 sing-box 执行。</p>
+    <p class="muted rt-list-hint">订阅格式由代理后端解析：sing-box 支持原生订阅、Clash、SIP008 和分享链接，mihomo 支持 Clash YAML 和分享链接。更新下载及节点健康检查由代理后端执行。</p>
     <div class="table-wrap rt-compact-table rt-sub-wrap">
       <table class="rt-sub-table">
         <thead><tr><th class="rt-col-switch">启用</th><th>名称</th><th>地址</th><th class="text-right">节点</th><th>上次更新</th><th class="rt-col-actions">操作</th></tr></thead>
@@ -93,7 +93,7 @@ async function remove(row) {
           <label>订阅名称</label><input v-model="editor.name" :disabled="editor.editing" placeholder="例如 airport" />
           <label>订阅地址</label><input v-model="editor.url" placeholder="https://example.com/subscribe" />
           <label>更新间隔（小时）</label><input v-model.number="editor.update_interval_hours" type="number" min="1" max="8760" />
-          <label>下载方式</label><select v-model="editor.use_proxy"><option :value="true">通过 sing-box 出口下载</option><option :value="false">直连下载</option></select>
+          <label>下载方式</label><select v-model="editor.use_proxy"><option :value="true">通过代理出口下载</option><option :value="false">直连下载</option></select>
           <label>启用</label><label class="switch-inline"><input v-model="editor.enabled" type="checkbox" /><span>{{ editor.enabled ? '启用此订阅及其节点' : '停用（保留订阅设置）' }}</span></label>
         </div>
         <div class="actions"><button class="btn secondary" type="button" @click="editor.open = false">取消</button><button class="btn primary" type="button" :disabled="editor.saving" @click="save">{{ editor.saving ? '保存中…' : '保存并应用' }}</button></div>

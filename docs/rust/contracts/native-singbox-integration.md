@@ -893,6 +893,91 @@ AtomDNS，sing-box 和 WebUI 未变。
 - **文档和日志安全**：不要贴出 API secret、完整节点 URL、UUID、密码或带 token 的订阅地址；
   调试错误转发也可能包含下游敏感文本，公开前必须脱敏。
 
+## 20. mihomo 后端
+
+2026-11-07 起，AtomDNS 同时支持定制版 mihomo（`DefaWong/mihomo` 的 `atomdns` 分支，基于
+上游 `Meta` v1.19.33）作为代理后端，由一键安装脚本二选一（`PROXY_BACKEND`）。对 AtomDNS
+而言两个后端是同一套协议：DNS 侧的 EDNS0 Option 65001、AtomDNS 缓存与规则语义完全不变；
+管理侧都提供 `/atomdns/config`、`/atomdns/config/status`、`/atomdns/config/parse-node` 和
+Clash API。设置字段 `singbox_api`、`singbox` 和管理路径 `/api/v1/singbox/*` 沿用旧名，
+WebUI 只把用户可见文字改成「代理 / 代理后端」，并显示识别到的后端名。
+
+### 20.1 后端识别
+
+mihomo 的 `GET /atomdns/config` 多返回 `"backend": "mihomo"`；没有这个字段按 sing-box 处理。
+`singbox_api.rs` 据此选择配置生成器、节点格式（sing-box outbound 用 `tag`，mihomo proxy 用
+`name`）和重名检查。`/api/v1/singbox/nodes` 返回 `backend` 供 WebUI 显示。
+
+### 20.2 mihomo 侧改动
+
+| 范围 | 文件（相对 mihomo 仓库根） | 说明 |
+|---|---|---|
+| 65001 解析 | `dns/fakeip_outbound.go`、`dns/middleware.go` | `withFakeIP` 对 A/AAAA 解析 SET/CLEAR，写入域名绑定；合成应答去掉请求 OPT，不回显私有 Option |
+| 域名 → 出口存储 | `component/fakeip/outbound.go`、`component/profile/cachefile/fakeip_outbound.go` | IPv4、IPv6 两个 pool 共享一个存储；`store-fake-ip` 打开时写 bbolt `fakeip_outbound` bucket，否则为 4096 条的内存 LRU；热重载 `CloneFrom`、`FlushFakeIP` 同步处理 |
+| 直接路由 | `tunnel/tunnel.go` | `preHandleMetadata` 反查 FakeIP 后把绑定出口写入 `metadata.SpecialProxy`（入站自带 `proxy` 时保留入站的），从而跳过规则；`findProxy` 额外查找 proxy-provider 节点；出口不存在时报 `proxy <tag> not found` 阻断 |
+| 管理接口 | `hub/route/atomdns.go` | 单个可写配置文件；GET 返回 YAML 转成的 JSON 和文件 SHA-256 revision；PUT 校验 revision、解析校验、保留 `.<name>.atomdns-previous`、原子写入，再在进程内 `ApplyConfig` |
+| 按名查节点 | `hub/route/proxies.go` | `/proxies/{name}`（含 `/delay`）也查 provider 节点，订阅节点可以按 `<订阅名>/<节点>` 测速；`GET /proxies` 列表仍只有顶层，AtomDNS 合并 `/providers/proxies` 补全 |
+
+与 sing-box 的差异：
+
+- **重载是同步的**。mihomo 在进程内应用配置，Clash API 不断开，PUT 返回时配置已生效或已回滚；
+  `/status` 只为兼容 AtomDNS 客户端协议，总是 `reloading: false`。
+- **订阅校验在应用之后**。解析阶段只校验结构；应用后若某个 HTTP provider 一个节点都没有
+  加载出来，就写回旧文件、重新应用旧配置并返回 400。同 URL 的旧缓存文件能加载出节点时不会
+  被判为失败。
+- **配置是 AtomDNS 整段接管的**。mihomo 把手动节点、订阅和分组分别放在 `proxies`、
+  `proxy-providers`、`proxy-groups`，AtomDNS 接管后整段重写 `proxies` 和 `proxy-providers`，
+  并重写管理分组的 `proxies`/`use`；其余配置原样保留，但经 YAML→JSON→YAML 往返后键会排序、
+  注释会丢失。
+- **订阅节点名带前缀**。provider 用 `override.additional-prefix: "<订阅名>/"`，节点名形如
+  `airport/HK 01`，与 sing-box 的 provider 标签一致，既避免不同订阅重名，也用于显示来源。
+- **订阅下载出口**。`use_proxy` 映射为 provider 的 `proxy: <分组>`，直连为 `proxy: DIRECT`；
+  没有任何手动节点时一律直连下载，因为只含订阅节点的分组无法承担订阅自己的首次下载。
+- **分组成员**。没有手动节点也没有订阅时成员为内置 `DIRECT`；只有订阅时省略 `proxies`、
+  只写 `use`。mihomo 没有 selector `default` 字段，当前选择由 `store-selected` 持久化。
+- **分享链接解析**用 mihomo 自带的 `common/convert`（socks/socks5/socks5h/http、vless、
+  vmess、ss、ssr、trojan、tuic、hysteria、hy2、anytls、mieru），再用 `adapter.ParseProxy`
+  校验；订阅格式支持 Clash YAML 和 base64 分享链接，不支持 sing-box JSON 订阅。
+- **出口下拉**过滤 mihomo 内置的 `REJECT`、`REJECT-DROP`、`PASS`、`PASS-RULE`、`COMPATIBLE`，保留 `DIRECT`。
+- **默认出口**显示管理分组（默认 `proxy`）：mihomo 的 `GLOBAL` 只在全局模式下生效，未绑定的
+  FakeIP 流量实际走 `MATCH,proxy`。分组不存在时才回退到 `GLOBAL.now`（sing-box 的 `route.final`）。
+
+### 20.3 已有验证
+
+- mihomo 单元测试：65001 SET/CLEAR/保留/未知版本，A/AAAA 共享，不回显 Option；bbolt 存储与
+  重载克隆；`SpecialProxy` 跳过规则、缺失出口报错、无绑定保持原路由、provider 节点查找。
+- macOS 本机端到端（dig 带 65001 → SOCKS 连接 FakeIP → mihomo 日志）：无指令走规则
+  `REJECT`；SET 后 `using proxy-alt`；AAAA 设置的绑定对 IPv4 连接生效并能直达
+  `sub/HK 01`；无指令查询保留绑定；不存在的出口报 `proxy gone not found`；CLEAR 后回到规则；
+  进程重启（`store-fake-ip`）和 `PUT /configs` 热重载后绑定仍在。
+- 管理接口本机验证：条件保存立即生效，过期 revision 409，结构错误 400，坏订阅 400 且已回滚，
+  分享链接解析与拒绝多行/未知协议。
+- AtomDNS：mihomo 配置生成、DIRECT 回退、只有订阅时直连下载、读取现有节点和保留名单元测试；
+  WebUI 110 项测试。
+
+2026-11-07 测试机 `10.0.0.144`（Alpine 3.21，OpenRC）实机验证，构建为
+AtomDNS `v0.7.1-mihomo.2`（builder 上原生 musl 静态编译）、sing-box
+`1.14.4-reF1nd-atomdns.1c29dbce59`、mihomo `1.19.33-atomdns.ef4f388116`，资产由
+`package-installer-assets.sh` 打包、安装脚本以 `ATOMDNS_ASSETS` 安装：
+
+- **sing-box 原地升级**：重跑安装脚本识别为 sing-box，busybox `sha256sum -c -` 只校验所选
+  后端的包；`/api/v1/singbox/nodes` 返回 `backend: sing-box`；通过 API 添加并删除
+  `socks5h://` 临时节点；灰名单 `@proxy-alt`、`@proxy-main` 经 AtomDNS 取得 FakeIP、从 mixed
+  入口连接，sing-box 日志分别为 `outbound/socks[proxy-alt]`、`outbound/socks[proxy-main]`。
+- **卸载后全新安装 mihomo**（`PROXY_BACKEND=mihomo`）：6666/9666/9090/7895 监听、TProxy 表与
+  策略路由就绪；同一套节点增删和灰名单绑定测试通过（日志 `using proxy-alt` / `using proxy-main`）；
+  测试机上临时 netns 客户端经 veth → prerouting → TProxy 的真实路径同样直达 `proxy-alt`。
+- **mihomo 订阅**：不可用的订阅（404、服务未起）返回 `loaded no nodes`，配置与 settings 都未写入；
+  本地 Clash YAML 订阅加载 2 个节点，名称 `fixture/...`、来源 `fixture`；立即更新、选择
+  `fixture/fixture-alt`、测速（333 ms）、重启和重跑安装脚本后选择保持；灰名单
+  `@fixture/fixture-alt` 直达该订阅节点；删除订阅后 `proxy-providers` 清空、分组去掉 `use`。
+- **重跑安装脚本**识别已装的 mihomo，保留配置和密钥，AtomDNS 继续可用。
+- WebUI「代理」页面显示 `mihomo`、默认出口 `proxy`、4 个可选出口，不含 `PASS-RULE`。
+
+未覆盖：Debian/systemd 上的 mihomo 安装、mihomo 下的 UDP 经 TProxy、IPv6 FakeIP 的客户端连接、
+真实机场订阅，以及 GitHub Actions 上的 `release-build.yml`（需要先把 mihomo `atomdns` 分支推到
+`DefaWong/mihomo`）。
+
 ---
 
 本文把当前源码行为、已完成的实机验证与未闭环事项分开记录。后续完成节点清理、异常路径

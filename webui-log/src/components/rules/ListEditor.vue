@@ -200,8 +200,8 @@ onBeforeUnmount(() => {
         <li v-if="matches.length > 300" class="muted">只显示前 300 条，共匹配 {{ matches.length.toLocaleString() }} 条</li>
       </ul>
       <div v-if="isGreylist && !searching && canWrite" class="rt-list-outbound-bar" data-greylist-outbound-helper>
-        <span class="muted rt-list-outbound-label">sing-box 出口</span>
-        <select v-model="selectedOutbound" class="rt-setting-input rt-list-outbound-select" aria-label="选择 sing-box 出口" :disabled="loading || saving || !loaded || truncated">
+        <span class="muted rt-list-outbound-label">代理出口</span>
+        <select v-model="selectedOutbound" class="rt-setting-input rt-list-outbound-select" aria-label="选择代理出口" :disabled="loading || saving || !loaded || truncated">
           <option value="">选择出口…</option>
           <option v-for="item in singboxOutbounds" :key="item.name" :value="item.name">
             {{ item.now ? `${item.name} (${item.type} → ${item.now})` : item.type ? `${item.name} (${item.type})` : item.name }}

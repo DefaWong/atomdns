@@ -54,7 +54,7 @@ async function save() {
     const body = { tag: editor.tag.trim(), link: editor.link.trim(), enabled: Boolean(editor.enabled) }
     if (editor.editing) await putJSON(`/api/v1/singbox/nodes/${encodeURIComponent(editor.tag)}`, body)
     else await postJSON('/api/v1/singbox/nodes', body)
-    setSuccess('节点已保存，sing-box 配置已重载')
+    setSuccess('节点已保存，代理后端配置已重载')
     editor.open = false
     emit('changed')
   } catch (error) { setError(`保存节点失败: ${error.message}`) } finally { editor.saving = false }
@@ -110,7 +110,7 @@ async function remove(node) {
       </div>
     </template>
     <p v-else class="muted rt-list-hint">还没有出口组。添加一个节点或订阅后即可在这里切换出口。</p>
-    <p class="muted rt-list-hint">手动节点通过节点链接导入，支持 socks5h://、vless:// 等 sing-box 支持的协议。订阅节点只读，请到「订阅管理」更新或删除。</p>
+    <p class="muted rt-list-hint">手动节点通过节点链接导入，支持 socks5h://、vless:// 等代理后端支持的协议。订阅节点只读，请到「订阅管理」更新或删除。</p>
     <Teleport to="body"><div v-if="editor.open" class="modal-mask modal-mask-center" @click.self="editor.open = false">
       <section class="panel form-modal-card" role="dialog" :aria-label="editor.editing ? '编辑节点' : '添加节点'">
         <header class="panel-header"><h3>{{ editor.editing ? '编辑节点' : '添加节点' }}</h3><button class="rt-row-icon" type="button" aria-label="关闭" @click="editor.open = false"><AppIcon name="x" :size="18" /></button></header>
@@ -118,7 +118,7 @@ async function remove(node) {
           <label for="singbox-node-link">{{ editor.editing ? '替换节点链接（留空保持不变）' : '节点链接' }}</label><textarea id="singbox-node-link" v-model="editor.link" rows="5" required placeholder="socks5h://example.com:1080#节点名称
 vless://…"></textarea>
           <label for="singbox-node-tag">节点标识（可选）</label><input id="singbox-node-tag" v-model="editor.tag" :disabled="editor.editing" placeholder="默认使用链接 # 后的名称" />
-          <p class="muted rt-list-hint">仅粘贴一条链接；认证和协议参数保存在 sing-box 节点配置中。编辑时留空可保留原节点。</p>
+          <p class="muted rt-list-hint">仅粘贴一条链接；认证和协议参数保存在代理后端的节点配置中。编辑时留空可保留原节点。</p>
           <label>启用</label><label class="switch-inline"><input v-model="editor.enabled" type="checkbox" /><span>{{ editor.enabled ? '启用' : '停用（保留配置）' }}</span></label>
         </div>
         <div class="actions"><button class="btn secondary" type="button" @click="editor.open = false">取消</button><button class="btn primary" type="button" :disabled="editor.saving" @click="save">{{ editor.saving ? '保存中…' : '保存并应用' }}</button></div>

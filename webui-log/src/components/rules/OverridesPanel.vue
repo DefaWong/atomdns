@@ -61,14 +61,14 @@ async function testSingbox() {
       secret: overrides.singbox_secret
     })
     if (result?.error) {
-      setError(`sing-box 连接失败: ${result.error}`)
+      setError(`代理后端连接失败: ${result.error}`)
       return
     }
     const count = Array.isArray(result?.outbounds) ? result.outbounds.length : 0
     const def = result?.default_outbound ? `（默认出口: ${result.default_outbound}）` : ''
-    setSuccess(`sing-box 连接成功，共读取 ${count} 个出口${def}`)
+    setSuccess(`代理后端连接成功，共读取 ${count} 个出口${def}`)
   } catch (error) {
-    setError(`sing-box 连接失败: ${error.message}`)
+    setError(`代理后端连接失败: ${error.message}`)
   } finally {
     testingSingbox.value = false
   }
@@ -146,14 +146,14 @@ onBeforeUnmount(() => window.removeEventListener('atomdns-log-refresh', load))
           <input v-model="overrides.ecs" class="rt-setting-input" placeholder="IPv4 / IPv6" aria-label="ECS 地址" />
           <button v-if="isModified(sources.ecs)" class="btn secondary" type="button" :disabled="applying || !loaded" @click="restoreOverride('ecs')">恢复默认</button>
         </SettingRow>
-        <SettingRow label="sing-box API 地址" layout="form" description="sing-box Clash API 地址，用于读取可选出口并在分配 FakeIP 时绑定出口。">
+        <SettingRow label="代理后端 API 地址" layout="form" description="sing-box 或 mihomo 的 Clash API 地址，用于读取可选出口并在分配 FakeIP 时绑定出口。">
           <span v-if="isModified(sources.singbox_addr)" class="rt-flag-mark" data-override-modified="singbox_addr">已修改</span>
-          <input v-model="overrides.singbox_addr" class="rt-setting-input" placeholder="http://127.0.0.1:9090" aria-label="sing-box API 地址" />
+          <input v-model="overrides.singbox_addr" class="rt-setting-input" placeholder="http://127.0.0.1:9090" aria-label="代理后端 API 地址" />
           <button v-if="isModified(sources.singbox_addr)" class="btn secondary" type="button" :disabled="applying || !loaded" @click="restoreOverride('singbox_addr')">恢复默认</button>
         </SettingRow>
-        <SettingRow label="sing-box API 密钥" layout="form" description="sing-box Clash API 访问密钥（secret），无密钥时留空。">
+        <SettingRow label="代理后端 API 密钥" layout="form" description="Clash API 访问密钥（secret），无密钥时留空。">
           <span v-if="isModified(sources.singbox_secret)" class="rt-flag-mark" data-override-modified="singbox_secret">已修改</span>
-          <input v-model="overrides.singbox_secret" class="rt-setting-input" type="password" placeholder="留空表示无密钥" aria-label="sing-box API 密钥" />
+          <input v-model="overrides.singbox_secret" class="rt-setting-input" type="password" placeholder="留空表示无密钥" aria-label="代理后端 API 密钥" />
           <button v-if="isModified(sources.singbox_secret)" class="btn secondary" type="button" :disabled="applying || !loaded" @click="restoreOverride('singbox_secret')">恢复默认</button>
         </SettingRow>
       </div>

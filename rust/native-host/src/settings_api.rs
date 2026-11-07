@@ -1016,7 +1016,7 @@ async fn singbox_outbounds(config: &CompiledConfig, override_body: Option<&[u8]>
             200,
             &serde_json::json!({
                 "configured": true,
-                "error": format!("sing-box API status {status}"),
+                "error": format!("proxy backend API status {status}"),
                 "default_outbound": "",
                 "outbounds": [],
             }),
@@ -1027,7 +1027,7 @@ async fn singbox_outbounds(config: &CompiledConfig, override_body: Option<&[u8]>
             200,
             &serde_json::json!({
                 "configured": true,
-                "error": "invalid JSON from sing-box /proxies",
+                "error": "invalid JSON from proxy backend /proxies",
                 "default_outbound": "",
                 "outbounds": [],
             }),
@@ -1038,18 +1038,30 @@ async fn singbox_outbounds(config: &CompiledConfig, override_body: Option<&[u8]>
             200,
             &serde_json::json!({
                 "configured": true,
-                "error": "missing proxies map in sing-box response",
+                "error": "missing proxies map in proxy backend response",
                 "default_outbound": "",
                 "outbounds": [],
             }),
         );
     };
-    let default_outbound = proxies
-        .get("GLOBAL")
-        .and_then(|g| g.get("now"))
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
+    // FakeIP traffic without a binding falls through to the managed group
+    // (sing-box `route.final`, mihomo `MATCH,<group>`). mihomo's GLOBAL only
+    // applies in global mode, so prefer the group when it exists.
+    let group = if config.settings.singbox.group.is_empty() {
+        "proxy"
+    } else {
+        config.settings.singbox.group.as_str()
+    };
+    let default_outbound = if proxies.get(group).and_then(|g| g.get("all")).is_some() {
+        group.to_owned()
+    } else {
+        proxies
+            .get("GLOBAL")
+            .and_then(|g| g.get("now"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
     let mut ordered_names: Vec<String> = proxies
         .get("GLOBAL")
         .and_then(|g| g.get("all"))
@@ -1075,9 +1087,11 @@ async fn singbox_outbounds(config: &CompiledConfig, override_body: Option<&[u8]>
             .get("type")
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default();
+        // Not usable as a rule target: sing-box dns/block and the mihomo
+        // built-ins other than DIRECT.
         if matches!(
             kind.to_ascii_lowercase().as_str(),
-            "dns" | "reject" | "block"
+            "dns" | "reject" | "block" | "rejectdrop" | "pass" | "passrule" | "compatible"
         ) {
             continue;
         }
