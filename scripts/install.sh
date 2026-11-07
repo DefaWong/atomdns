@@ -425,7 +425,9 @@ AtomDNS $("${BIN_DIR}/atomdns" version) and $("${BIN_DIR}/sing-box" version | he
   DNS:    ${ADDR}:53
 
 Next steps:
-  1. Add proxy nodes or subscriptions in the WebUI under sing-box.
-  2. On the main router, use ${ADDR} as the clients' DNS server and route
+  1. Give this host a fixed IP (static address or a DHCP reservation): clients use
+     it as their DNS server and the FakeIP routes point at it.
+  2. Add proxy nodes or subscriptions in the WebUI under sing-box.
+  3. On the main router, use ${ADDR} as the clients' DNS server and route
      ${FAKEIP4} and ${FAKEIP6} to ${ADDR} (static route or policy routing).
 EOF
