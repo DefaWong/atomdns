@@ -356,7 +356,7 @@ fn managed_config(
                 .map(SingboxNode::outbound),
         );
     }
-    let manual_tags: Vec<String> = outbounds
+    let mut manual_tags: Vec<String> = outbounds
         .iter()
         .filter(|item| !is_group_or_builtin(item))
         .filter_map(|item| {
@@ -372,6 +372,17 @@ fn managed_config(
         .filter(|subscription| subscription.enabled)
         .map(|subscription| subscription.name.clone())
         .collect();
+    if manual_tags.is_empty() && provider_tags.is_empty() {
+        // sing-box rejects an empty selector: with no node left, fall back to
+        // direct so the configuration stays valid (fresh install, last delete).
+        if !outbounds
+            .iter()
+            .any(|item| item.get("tag").and_then(serde_json::Value::as_str) == Some("direct"))
+        {
+            outbounds.push(serde_json::json!({"type": "direct", "tag": "direct"}));
+        }
+        manual_tags.push("direct".to_owned());
+    }
     if management.providers_managed {
         let providers = management
             .subscriptions
@@ -1017,6 +1028,14 @@ mod tests {
                 .iter()
                 .any(|item| item["type"] == "socks")
         );
+        let selector = compiled["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["tag"] == "proxy")
+            .unwrap();
+        assert_eq!(selector["outbounds"], serde_json::json!(["direct"]));
+        assert_eq!(selector["default"], "direct");
     }
 
     #[test]

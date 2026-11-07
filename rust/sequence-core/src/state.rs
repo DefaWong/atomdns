@@ -77,7 +77,9 @@ impl ExecutionState {
     pub fn set_raw_response_with_origin(&mut self, wire: Vec<u8>, origin: Option<ResponseOrigin>) {
         let origin = origin.map(|mut origin| {
             if origin.proxy_outbound.is_none() {
-                origin.proxy_outbound.clone_from(&self.routing.proxy_outbound);
+                origin
+                    .proxy_outbound
+                    .clone_from(&self.routing.proxy_outbound);
             }
             origin
         });
