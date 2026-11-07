@@ -106,7 +106,7 @@ v0.5.0 起 `config.url` 指向 file 仓库（此前指向 Release 资产）；�
 - **一键安装**：`scripts/install.sh` 支持 x86_64 的 Alpine 和 Debian 系，会一起装好 AtomDNS 与定制版 sing-box，包括 TProxy 接管 FakeIP 流量，见 [installer.md](installer.md)。
 - `webinfo/settings.json` 等状态文件改为 600 权限写入，因为 settings.json 里保存着 sing-box API 密钥。
 - 资产：
-  - 七种程序包。
+  - 三种程序包，只有 x86_64：`amd64`、`amd64-v3`、`amd64-musl`。fork 不提供 ARM，`release-build.yml` 也只编这三种。
   - `atomdns-webui.tar.gz`。
   - 清单。
   - 全新安装包 `config_rust.zip`。
